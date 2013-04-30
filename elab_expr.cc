@@ -1134,7 +1134,7 @@ unsigned PECallFunction::test_width_method_(Design*des, NetScope*scope,
 			     << endl;
 		  }
 
-		  netclass_t* class_type = net->class_type();
+		  const netclass_t* class_type = net->class_type();
 		  member_type = class_type->get_property(member_name);
 		  use_path = tmp_path;
 
@@ -1164,7 +1164,7 @@ unsigned PECallFunction::test_width_method_(Design*des, NetScope*scope,
 	    return expr_width_;
       }
 
-      if (netclass_t*class_type = net->class_type()) {
+      if (const netclass_t*class_type = net->class_type()) {
 	    cerr << get_fileline() << ": PECallFunction::test_width_method_: "
 		 << "Try to find method " << method_name
 		 << " of class " << class_type->get_name() << endl;
@@ -1425,7 +1425,7 @@ NetExpr* PECallFunction::elaborate_access_func_(Design*des, NetScope*scope,
  */
 static NetExpr* check_for_enum_methods(const LineInfo*li,
                                        Design*des, NetScope*scope,
-                                       netenum_t*netenum,
+                                       const netenum_t*netenum,
                                        pform_name_t use_path,
                                        perm_string method_name,
                                        NetExpr*expr,
@@ -1760,7 +1760,7 @@ static NetExpr* check_for_class_property(const LineInfo*li,
 					 NetNet*net,
 					 const name_component_t&comp)
 {
-      netclass_t*class_type = net->class_type();
+      const netclass_t*class_type = net->class_type();
       const ivl_type_s*ptype = class_type->get_property(comp.name);
 
       if (ptype == 0) {
@@ -2055,7 +2055,7 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 	    }
       }
 
-      if (netenum_t*netenum = net->enumeration()) {
+      if (const netenum_t*netenum = net->enumeration()) {
 	      // We may need the net expression for the
 	      // enumeration variable so get it.
 	    NetESignal*expr = new NetESignal(net);
@@ -2082,7 +2082,7 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 	    }
       }
 
-      if (netclass_t*class_type = net->class_type()) {
+      if (const netclass_t*class_type = net->class_type()) {
 	    NetScope*func = class_type->method_from_name(method_name);
 	    if (func == 0) {
 		  return 0;
@@ -2595,7 +2595,7 @@ unsigned PEIdent::test_width(Design*des, NetScope*scope, width_mode_t&mode)
 	    ivl_assert(*this, 0);
       }
 
-      if (netdarray_t*darray = net? net->darray_type() : 0) {
+      if (const netdarray_t*darray = net? net->darray_type() : 0) {
 	    if (use_sel == index_component_t::SEL_BIT) {
 		  expr_type_   = darray->element_base_type();
 		  expr_width_  = darray->element_width();
@@ -2637,7 +2637,7 @@ unsigned PEIdent::test_width(Design*des, NetScope*scope, width_mode_t&mode)
 	// The width of an enumeration literal is the width of the
 	// enumeration base.
       if (const NetEConstEnum*par_enum = dynamic_cast<const NetEConstEnum*> (par)) {
-	    netenum_t*use_enum = par_enum->enumeration();
+	    const netenum_t*use_enum = par_enum->enumeration();
 	    ivl_assert(*this, use_enum != 0);
 
 	    expr_type_   = use_enum->base_type();
@@ -2714,7 +2714,7 @@ unsigned PEIdent::test_width(Design*des, NetScope*scope, width_mode_t&mode)
 			}
 		  }
 
-		  if (netclass_t*class_type = net->class_type()) {
+		  if (const netclass_t*class_type = net->class_type()) {
 			const ivl_type_s*ptype = class_type->get_property(method_name);
 			if (ptype) {
 			      expr_type_   = ptype->base_type();
@@ -3037,7 +3037,7 @@ NetExpr* PEIdent::elaborate_expr(Design*des, NetScope*scope,
 	    if (net != 0) {
 		    // If this net is actually an enum, the method may
 		    // be an enumeration method.
-		  if (netenum_t*netenum = net->enumeration()) {
+		  if (const netenum_t*netenum = net->enumeration()) {
 			  // We may need the net expression for the
 			  // enumeration variable so get it.
 			NetESignal*expr = new NetESignal(net);
@@ -4177,7 +4177,7 @@ NetExpr* PEIdent::elaborate_expr_net_bit_(Design*des, NetScope*scope,
 
       NetExpr*mux = elab_and_eval(des, scope, index_tail.msb, -1, need_const);
 
-      if (netdarray_t*darray = net->sig()->darray_type()) {
+      if (const netdarray_t*darray = net->sig()->darray_type()) {
 	      // Special case: This is a select of a dynamic
 	      // array. Generate a NetESelect and attach it to
 	      // the NetESignal. This should be interpreted as
@@ -4448,12 +4448,106 @@ unsigned PENewClass::test_width(Design*, NetScope*, width_mode_t&)
       return 1;
 }
 
-NetExpr* PENewClass::elaborate_expr(Design*, NetScope*,
+NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
 				    ivl_type_t ntype, unsigned) const
 {
-      NetENew*tmp = new NetENew(ntype);
-      tmp->set_line(*this);
-      return tmp;
+      NetENew*obj = new NetENew(ntype);
+      obj->set_line(*this);
+
+	// Find the constructor for the class. If there is no
+	// constructor then the result of this expression is the
+	// allocation alone.
+      const netclass_t*ctype = dynamic_cast<const netclass_t*> (ntype);
+      NetScope*new_scope = ctype->method_from_name(perm_string::literal("new"));
+      if (new_scope == 0) {
+	      // No constructor.
+	    if (parms_.size() > 0) {
+		  cerr << get_fileline() << ": error: "
+		       << "Class " << ctype->get_name()
+		       << " has no constructor, but you passed " << parms_.size()
+		       << " arguments to the new operator." << endl;
+		  des->errors += 1;
+	    }
+	    return obj;
+      }
+
+      NetFuncDef*def = new_scope->func_def();
+      ivl_assert(*this, def);
+
+      if ((parms_.size()+1) != def->port_count()) {
+	    cerr << get_fileline() << ": error: Parm count mismatch"
+		 << " passing " << parms_.size() << " arguments "
+		 << " to constructor expecting " << (def->port_count()-1)
+		 << " arguments." << endl;
+	    des->errors += 1;
+	    return obj;
+      }
+
+      vector<NetExpr*> parms (1 + parms_.size());
+      parms[0] = obj;
+
+      int missing_parms = 0;
+      int parm_errors = 0;
+      for (size_t idx = 0 ; idx < parms_.size() ; idx += 1) {
+	    PExpr*tmp = parms_[idx];
+	    size_t pidx = idx + 1;
+
+	    if (tmp == 0) {
+		  parms[pidx] = 0;
+		  missing_parms += 1;
+		  continue;
+	    }
+
+	    parms[pidx] = elaborate_rval_expr(des, scope, def->port(pidx)->data_type(),
+					      def->port(pidx)->vector_width(),
+					      tmp, false);
+	    if (parms[pidx] == 0) {
+		  parm_errors += 1;
+		  continue;
+	    }
+      }
+
+      if (missing_parms > 0) {
+	    cerr << get_fileline() << ": error: The " << scope_path(new_scope)
+		 << " constructor call is missing arguments." << endl;
+	    parm_errors += 1;
+	    des->errors += 1;
+      }
+
+	// The return value for the constructor is actually the "this"
+	// variable, instead of the "new" scope name.
+      NetNet*res = new_scope->find_signal(perm_string::literal("@"));
+      ivl_assert(*this, res);
+
+      NetESignal*eres = new NetESignal(res);
+      NetEUFunc*con = new NetEUFunc(scope, new_scope, eres, parms, true);
+      con->set_line(*this);
+
+      return con;
+}
+
+unsigned PENewCopy::test_width(Design*, NetScope*, width_mode_t&)
+{
+      expr_type_  = IVL_VT_CLASS;
+      expr_width_ = 1;
+      min_width_  = 1;
+      signed_flag_= false;
+      return 1;
+}
+
+NetExpr* PENewCopy::elaborate_expr(Design*des, NetScope*scope, ivl_type_t obj_type, unsigned) const
+{
+      NetExpr*copy_arg = src_->elaborate_expr(des, scope, obj_type, 0);
+      if (copy_arg == 0)
+	    return 0;
+
+      NetENew*obj_new = new NetENew(obj_type);
+      obj_new->set_line(*this);
+
+      NetEShallowCopy*copy = new NetEShallowCopy(obj_new, copy_arg);
+      copy->set_line(*this);
+
+      return copy;
 }
 
 /*

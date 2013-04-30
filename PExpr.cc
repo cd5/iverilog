@@ -426,7 +426,26 @@ PENewClass::PENewClass(void)
 {
 }
 
+PENewClass::PENewClass(const list<PExpr*>&p)
+: parms_(p.size())
+{
+      size_t tmp_idx = 0;
+      for (list<PExpr*>::const_iterator cur = p.begin()
+		 ; cur != p.end() ; ++ cur) {
+	    parms_[tmp_idx++] = *cur;
+      }
+}
+
 PENewClass::~PENewClass()
+{
+}
+
+PENewCopy::PENewCopy(PExpr*src)
+: src_(src)
+{
+}
+
+PENewCopy::~PENewCopy()
 {
 }
 

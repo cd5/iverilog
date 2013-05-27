@@ -63,12 +63,12 @@ using namespace std;
  * child of the current thread, and the current thread a parent of the
  * new thread. Any child can be reaped by a %join.
  *
- * Children placed into an automatic scope are given special
- * treatment, which is required to make function/tasks calls that they
- * represent work correctly. These automatic children are copied into
- * an automatic_children set to mark them for this handling. %join
- * operations will guarantee that automatic threads are joined first,
- * before any non-automatic threads.
+ * Children placed into a task or function scope are given special
+ * treatment, which is required to make task/function calls that they
+ * represent work correctly. These task/function children are copied
+ * into a task_func_children set to mark them for this handling. %join
+ * operations will guarantee that task/function threads are joined first,
+ * before any non-task/function threads.
  *
  * It is a programming error for a thread that created threads to not
  * %join (or %join/detach) as many as it created before it %ends. The
@@ -204,8 +204,8 @@ struct vthread_s {
       unsigned delay_delete      :1;
 	/* This points to the children of the thread. */
       set<struct vthread_s*>children;
-	/* No more than 1 of the children are automatic. */
-      set<vthread_s*>automatic_children;
+	/* No more than 1 of the children are tasks or functions. */
+      set<vthread_s*>task_func_children;
 	/* This points to my parent, if I have one. */
       struct vthread_s*parent;
 	/* This points to the containing scope. */
@@ -2515,39 +2515,6 @@ bool of_DUP_REAL(vthread_t thr, vvp_code_t)
  * This terminates the current thread. If there is a parent who is
  * waiting for me to die, then I schedule it. At any rate, I mark
  * myself as a zombie by setting my pc to 0.
- *
- * It is possible for this thread to have children at this %end. This
- * means that my child is really my sibling created by my parent, and
- * my parent will do the proper %joins in due course. For example:
- *
- *     %fork child_1, test;
- *     %fork child_2, test;
- *     ... parent code ...
- *     %join;
- *     %join;
- *     %end;
- *
- *   child_1 ;
- *     %end;
- *   child_2 ;
- *     %end;
- *
- * In this example, the main thread creates threads child_1 and
- * child_2. It is possible that this thread is child_2, so there is a
- * parent pointer and a child pointer, even though I did no
- * %forks or %joins. This means that I have a ->child pointer and a
- * ->parent pointer.
- *
- * If the main thread has executed the first %join, then it is waiting
- * for me, and I will be reaped right away.
- *
- * If the main thread has not executed a %join yet, then this thread
- * becomes a zombie. The main thread executes its %join eventually,
- * reaping me at that time.
- *
- * It does not matter the order that child_1 and child_2 threads call
- * %end -- child_2 will be reaped by the first %join, and child_1 will
- * be reaped by the second %join.
  */
 bool of_END(vthread_t thr, vvp_code_t)
 {
@@ -2561,10 +2528,10 @@ bool of_END(vthread_t thr, vvp_code_t)
       if (thr->parent && thr->parent->i_am_joining) {
 	    vthread_t tmp = thr->parent;
 
-	      // Detect that the parent is waiting on an automatic
-	      // thread. Automatic threads must be reaped first. If
-	      // the parent is waiting on an auto (other than me) then
-	      // go into zombie state to be picked up later.
+	      // Detect that the parent is waiting on a task or function
+	      // thread. These threads must be reaped first. If the
+	      // parent is waiting on a task or function (other than me)
+	      // then go into zombie state to be picked up later.
 	    if (!test_joinable(tmp, thr))
 		  return false;
 
@@ -2743,16 +2710,18 @@ bool of_FORK(vthread_t thr, vvp_code_t cp)
                  on the write context stack. */
             child->wt_context = thr->wt_context;
             child->rd_context = thr->wt_context;
-
-	    thr->automatic_children.insert(child);
       }
 
       child->parent = thr;
       thr->children.insert(child);
 
+      int child_type = cp->scope->get_type_code();
+      if ((child_type == vpiTask) || (child_type == vpiFunction))
+	    thr->task_func_children.insert(child);
+
 	/* If the new child was created to evaluate a function,
 	   run it immediately, then return to this thread. */
-      if (cp->scope->get_type_code() == vpiFunction) {
+      if (child_type == vpiFunction) {
 	    child->is_scheduled = 1;
 	    vthread_run(child);
             running_thread = thr;
@@ -3065,8 +3034,8 @@ bool of_JMP1(vthread_t thr, vvp_code_t cp)
 
 static bool test_joinable(vthread_t thr, vthread_t child)
 {
-      set<vthread_t>::iterator auto_cur = thr->automatic_children.find(child);
-      if (!thr->automatic_children.empty() && auto_cur == thr->automatic_children.end())
+      set<vthread_t>::iterator cur = thr->task_func_children.find(child);
+      if (!thr->task_func_children.empty() && cur == thr->task_func_children.end())
 	    return false;
 
       return true;
@@ -3076,8 +3045,10 @@ static void do_join(vthread_t thr, vthread_t child)
 {
       assert(child->parent == thr);
 
+      thr->task_func_children.erase(child);
+
         /* If the immediate child thread is in an automatic scope... */
-      if (thr->automatic_children.erase(child) != 0) {
+      if (child->wt_context) {
               /* and is the top level task/function thread... */
             if (thr->wt_context != thr->rd_context) {
                     /* Pop the child context from the write context stack. */
@@ -3128,7 +3099,7 @@ bool of_JOIN_DETACH(vthread_t thr, vvp_code_t cp)
 {
       unsigned long count = cp->number;
 
-      assert(thr->automatic_children.empty());
+      assert(thr->task_func_children.empty());
       assert(count == thr->children.size());
 
       while (!thr->children.empty()) {

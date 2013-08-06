@@ -27,9 +27,9 @@ VPATH = $(srcdir)
 
 bindir = @bindir@
 libdir = @libdir@
-includedir = $(prefix)/include
 
 CC = @CC@
+CC = @CXX@
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_DATA = @INSTALL_DATA@
@@ -41,17 +41,18 @@ INCLUDE_PATH = -I. -I.. -I$(srcdir) -I$(srcdir)/..
 endif
 
 CPPFLAGS = $(INCLUDE_PATH) @CPPFLAGS@ @DEFS@ @PICFLAG@
-CFLAGS = @WARNING_FLAGS@ @CFLAGS@
+CXXFLAGS = @WARNING_FLAGS@ @CXXFLAGS@
 LDFLAGS = @LDFLAGS@
 
-O = stub.o classes.o constant.o enumerate.o expression.o statement.o switches.o types.o
+O = blif.o constants.o logic_gate.o lpm.o lpm_add.o lpm_cmp_eq.o lpm_cmp_gt.o \
+    lpm_mux.o lpm_part_vp.o lpm_re_logic.o nex_data.o
 
-all: dep stub.tgt
+all: dep blif.tgt
 
 check: all
 
 clean:
-	rm -rf *.o dep stub.tgt
+	rm -rf *.o dep blif.tgt
 
 distclean: clean
 	rm -f Makefile config.log
@@ -60,13 +61,13 @@ cppcheck: $(O:.o=.c)
 	cppcheck --enable=all -f $(INCLUDE_PATH) $^
 
 Makefile: $(srcdir)/Makefile.in ../config.status
-	cd ..; ./config.status --file=tgt-stub/$@
+	cd ..; ./config.status --file=tgt-blif/$@
 
 dep:
 	mkdir dep
 
-%.o: %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) @DEPENDENCY_FLAG@ -c $< -o $*.o
+%.o: %.cc
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) @DEPENDENCY_FLAG@ -c $< -o $*.o
 	mv $*.d dep
 
 ifeq (@WIN32@,yes)
@@ -77,28 +78,28 @@ else
   TGTDEPLIBS=
 endif
 
-stub.tgt: $O $(TGTDEPLIBS)
+blif.tgt: $O $(TGTDEPLIBS)
 	$(CC) @shared@ $(LDFLAGS) -o $@ $O $(TGTLDFLAGS)
 
-install: all installdirs $(libdir)/ivl$(suffix)/stub.tgt \
-	$(libdir)/ivl$(suffix)/stub.conf $(libdir)/ivl$(suffix)/stub-s.conf
+install: all installdirs $(libdir)/ivl$(suffix)/blif.tgt $(INSTALL_DOC) $(libdir)/ivl$(suffix)/blif.conf $(libdir)/ivl$(suffix)/blif-s.conf
 
-$(libdir)/ivl$(suffix)/stub.tgt: ./stub.tgt
-	$(INSTALL_PROGRAM) ./stub.tgt "$(DESTDIR)$(libdir)/ivl$(suffix)/stub.tgt"
+$(libdir)/ivl$(suffix)/blif.tgt: ./blif.tgt
+	$(INSTALL_PROGRAM) ./blif.tgt "$(DESTDIR)$(libdir)/ivl$(suffix)/blif.tgt"
 
-$(libdir)/ivl$(suffix)/stub.conf: stub.conf
-	$(INSTALL_DATA) $< "$(DESTDIR)$(libdir)/ivl$(suffix)/stub.conf"
+$(libdir)/ivl$(suffix)/blif.conf: $(srcdir)/blif.conf
+	$(INSTALL_DATA) $(srcdir)/blif.conf "$(DESTDIR)$(libdir)/ivl$(suffix)/blif.conf"
 
-$(libdir)/ivl$(suffix)/stub-s.conf: stub-s.conf
-	$(INSTALL_DATA) $< "$(DESTDIR)$(libdir)/ivl$(suffix)/stub-s.conf"
+$(libdir)/ivl$(suffix)/blif-s.conf: $(srcdir)/blif-s.conf
+	$(INSTALL_DATA) $(srcdir)/blif-s.conf "$(DESTDIR)$(libdir)/ivl$(suffix)/blif-s.conf"
+
 
 installdirs: $(srcdir)/../mkinstalldirs
-	$(srcdir)/../mkinstalldirs "$(DESTDIR)$(libdir)/ivl$(suffix)"
+	$(srcdir)/../mkinstalldirs "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libdir)/ivl$(suffix)"
 
 uninstall:
-	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/stub.tgt"
-	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/stub.conf"
-	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/stub-s.conf"
+	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/blif.tgt"
+	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/blif.conf"
+	rm -f "$(DESTDIR)$(libdir)/ivl$(suffix)/blif-s.conf"
 
 
 -include $(patsubst %.o, dep/%.d, $O)

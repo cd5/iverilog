@@ -26,6 +26,7 @@
 # include  <vector>
 # include  <list>
 class Design;
+class NetExpr;
 class NetNet;
 class NetScope;
 class PWire;
@@ -39,7 +40,7 @@ class PTaskFunc : public PScope, public LineInfo {
       PTaskFunc(perm_string name, LexicalScope*parent);
       ~PTaskFunc();
 
-      void set_ports(std::vector<PWire *>*p);
+      void set_ports(std::vector<pform_tf_port_t>*p);
 
       void set_this(class_type_t*use_type, PWire*this_wire);
 
@@ -48,14 +49,18 @@ class PTaskFunc : public PScope, public LineInfo {
       inline class_type_t* method_of() const { return this_type_; }
 
     protected:
+	// Elaborate the ports list. Write into the ports vector the
+	// NetNet pointers for the ports, and write into the pdefs the
+	// default value expressions, if any.
       void elaborate_sig_ports_(Design*des, NetScope*scope,
-				std::vector<NetNet*>&ports) const;
+				std::vector<NetNet*>&ports,
+				std::vector<NetExpr*>&pdefs) const;
 
       void dump_ports_(std::ostream&out, unsigned ind) const;
 
     private:
       class_type_t*this_type_;
-      std::vector<PWire*>*ports_;
+      std::vector<pform_tf_port_t>*ports_;
 };
 
 /*

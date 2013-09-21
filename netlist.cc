@@ -2043,46 +2043,63 @@ verinum::V NetConst::value(unsigned idx) const
       return value_[idx];
 }
 
-NetFuncDef::NetFuncDef(NetScope*s, NetNet*result, const vector<NetNet*>&po)
-: scope_(s), statement_(0), result_sig_(result), ports_(po)
+NetBaseDef::NetBaseDef(NetScope*s, const vector<NetNet*>&po, const std::vector<NetExpr*>&pd)
+: scope_(s), ports_(po), pdefaults_(pd)
+{
+      proc_ = 0;
+}
+
+NetBaseDef::~NetBaseDef()
+{
+}
+
+const NetScope* NetBaseDef::scope() const
+{
+      return scope_;
+}
+
+NetScope*NetBaseDef::scope()
+{
+      return scope_;
+}
+
+unsigned NetBaseDef::port_count() const
+{
+      return ports_.size();
+}
+
+NetNet* NetBaseDef::port(unsigned idx) const
+{
+      assert(idx < ports_.size());
+      return ports_[idx];
+}
+
+NetExpr* NetBaseDef::port_defe(unsigned idx) const
+{
+      assert(idx < pdefaults_.size());
+      return pdefaults_[idx];
+}
+
+void NetBaseDef::set_proc(NetProc*st)
+{
+      assert(proc_ == 0);
+      assert(st != 0);
+      proc_ = st;
+}
+
+const NetProc* NetBaseDef::proc() const
+{
+      return proc_;
+}
+
+NetFuncDef::NetFuncDef(NetScope*s, NetNet*result, const vector<NetNet*>&po,
+		       const vector<NetExpr*>&pd)
+: NetBaseDef(s, po, pd), result_sig_(result)
 {
 }
 
 NetFuncDef::~NetFuncDef()
 {
-}
-
-const NetScope* NetFuncDef::scope() const
-{
-      return scope_;
-}
-
-void NetFuncDef::set_proc(NetProc*st)
-{
-      assert(statement_ == 0);
-      assert(st != 0);
-      statement_ = st;
-}
-
-const NetProc* NetFuncDef::proc() const
-{
-      return statement_;
-}
-
-NetScope*NetFuncDef::scope()
-{
-      return scope_;
-}
-
-unsigned NetFuncDef::port_count() const
-{
-      return ports_.size();
-}
-
-const NetNet* NetFuncDef::port(unsigned idx) const
-{
-      assert(idx < ports_.size());
-      return ports_[idx];
 }
 
 const NetNet* NetFuncDef::return_sig() const
@@ -2620,41 +2637,14 @@ unsigned NetUReduce::width() const
       return width_;
 }
 
-NetTaskDef::NetTaskDef(NetScope*n, const vector<NetNet*>&po)
-: scope_(n), proc_(0), ports_(po)
+NetTaskDef::NetTaskDef(NetScope*n, const vector<NetNet*>&po, const vector<NetExpr*>&pd)
+: NetBaseDef(n, po, pd)
 {
 }
 
 NetTaskDef::~NetTaskDef()
 {
       delete proc_;
-}
-
-void NetTaskDef::set_proc(NetProc*p)
-{
-      assert(proc_ == 0);
-      proc_ = p;
-}
-
-unsigned NetTaskDef::port_count() const
-{
-      return ports_.size();
-}
-
-NetNet* NetTaskDef::port(unsigned idx) const
-{
-      assert(idx < ports_.size());
-      return ports_[idx];
-}
-
-const NetScope* NetTaskDef::scope() const
-{
-      return scope_;
-}
-
-const NetProc*NetTaskDef::proc() const
-{
-      return proc_;
 }
 
 /*

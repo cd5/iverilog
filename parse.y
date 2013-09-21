@@ -70,7 +70,10 @@ static pform_name_t* pform_create_this(void)
 
 static pform_name_t* pform_create_super(void)
 {
-      return 0;
+      name_component_t name (perm_string::literal("#"));
+      pform_name_t*res = new pform_name_t;
+      res->push_back(name);
+      return res;
 }
 
 /* This is used to keep track of the extra arguments after the notifier
@@ -165,6 +168,18 @@ template <class T> void append(vector<T>&out, const vector<T>&in)
 {
       for (size_t idx = 0 ; idx < in.size() ; idx += 1)
 	    out.push_back(in[idx]);
+}
+
+/*
+ * Look at the list and pull null pointers off the end.
+ */
+static void strip_tail_items(list<PExpr*>*lst)
+{
+      while (lst->size() > 0) {
+	    if (lst->back() != 0)
+		  return;
+	    lst->pop_back();
+      }
 }
 
 /*
@@ -338,6 +353,8 @@ static void current_function_set_statement(const YYLTYPE&loc, vector<Statement*>
       list<perm_string>*perm_strings;
 
       list<pair<perm_string,PExpr*> >*port_list;
+
+      vector<pform_tf_port_t>* tf_ports;
 
       pform_name_t*pform_name;
 
@@ -544,9 +561,9 @@ static void current_function_set_statement(const YYLTYPE&loc, vector<Statement*>
 %type <named_pexprs> enum_name_list enum_name
 %type <enum_type> enum_data_type
 
-%type <wires> task_item task_item_list task_item_list_opt
-%type <wires> tf_port_declaration tf_port_item tf_port_list tf_port_list_opt
-%type <wires> function_item function_item_list function_item_list_opt
+%type <tf_ports> function_item function_item_list function_item_list_opt
+%type <tf_ports> task_item task_item_list task_item_list_opt
+%type <tf_ports> tf_port_declaration tf_port_item tf_port_list tf_port_list_opt
 
 %type <named_pexpr> port_name parameter_value_byname
 %type <named_pexprs> port_name_list parameter_value_byname_list
@@ -573,7 +590,7 @@ static void current_function_set_statement(const YYLTYPE&loc, vector<Statement*>
 %type <decl_assignment> variable_decl_assignment
 %type <decl_assignments> list_of_variable_decl_assignments
 
-%type <data_type>  data_type data_type_or_implicit
+%type <data_type>  data_type data_type_or_implicit data_type_or_implicit_or_void
 %type <data_type>  class_declaration_extends_opt
 %type <class_type> class_identifier
 %type <struct_member>  struct_union_member
@@ -776,20 +793,6 @@ class_item /* IEEE1800-2005: A.1.8 */
 	current_function = 0;
       }
 
-    /* IEEE1800 A.1.8: class_constructor_declaration with a call to
-       parent constructor. Note that the implicit_class_handle must
-       be K_super ("this.new" makes little sense) but that would
-       cause a conflict. */
-/* XXXX
-  | method_qualifier_opt K_function K_new '(' tf_port_list_opt ')' ';'
-    function_item_list_opt
-    attribute_list_opt implicit_class_handle '.' K_new '(' expression_list_with_nuls ')'
-    statement_or_null_list_opt
-    K_endfunction endnew_opt
-      { yyerror(@3, "sorry: Class constructors with parent not supported yet.");
-	yyerrok;
-      }
-*/
     /* Class properties... */
 
   | property_qualifier_opt data_type list_of_variable_decl_assignments ';'
@@ -853,13 +856,10 @@ class_item_qualifier_opt
   ;
 
 class_new /* IEEE1800-2005 A.2.4 */
-  : K_new '(' ')'
-      { PENewClass*tmp = new PENewClass;
-	FILE_NAME(tmp, @1);
-	$$ = tmp;
-      }
-  | K_new '(' expression_list_proper ')'
-      { PENewClass*tmp = new PENewClass(*$3);
+  : K_new '(' expression_list_with_nuls ')'
+      { list<PExpr*>*expr_list = $3;
+	strip_tail_items(expr_list);
+	PENewClass*tmp = new PENewClass(*expr_list);
 	FILE_NAME(tmp, @1);
 	delete $3;
 	$$ = tmp;
@@ -1021,6 +1021,16 @@ data_type_or_implicit /* IEEE1800-2005: A.2.2.1 */
   ;
 
 
+data_type_or_implicit_or_void
+  : data_type_or_implicit
+      { $$ = $1; }
+  | K_void
+      { void_type_t*tmp = new void_type_t;
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+  ;
+
   /* NOTE 1: We pull the "timeunits_declaration" into the description
      here in order to be a little more flexible with where timeunits
      statements may go. This may be a bad idea, but it is legacy now. */
@@ -1089,7 +1099,7 @@ for_step /* IEEE1800-2005: A.6.8 */
      definitions in the func_body to take on the scope of the function
      instead of the module. */
 function_declaration /* IEEE1800-2005: A.2.6 */
-  : K_function K_automatic_opt data_type_or_implicit IDENTIFIER ';'
+  : K_function K_automatic_opt data_type_or_implicit_or_void IDENTIFIER ';'
       { assert(current_function == 0);
 	current_function = pform_push_function_scope(@1, $4, $2);
       }
@@ -1118,7 +1128,7 @@ function_declaration /* IEEE1800-2005: A.2.6 */
 	delete[]$4;
       }
 
-  | K_function K_automatic_opt data_type_or_implicit IDENTIFIER
+  | K_function K_automatic_opt data_type_or_implicit_or_void IDENTIFIER
       { assert(current_function == 0);
 	current_function = pform_push_function_scope(@1, $4, $2);
       }
@@ -1154,7 +1164,7 @@ function_declaration /* IEEE1800-2005: A.2.6 */
 
   /* Detect and recover from some errors. */
 
-  | K_function K_automatic_opt data_type_or_implicit IDENTIFIER error K_endfunction
+  | K_function K_automatic_opt data_type_or_implicit_or_void IDENTIFIER error K_endfunction
       { /* */
 	if (current_function) {
 	      pform_pop_scope();
@@ -1735,7 +1745,7 @@ task_declaration /* IEEE1800-2005: A.2.7 */
 
 tf_port_declaration /* IEEE1800-2005: A.2.7 */
   : port_direction K_reg_opt unsigned_signed_opt range_opt list_of_identifiers ';'
-      { vector<PWire*>*tmp = pform_make_task_ports(@1, $1,
+      { vector<pform_tf_port_t>*tmp = pform_make_task_ports(@1, $1,
 						$2 ? IVL_VT_LOGIC :
 						     IVL_VT_NO_TYPE,
 						$3, $4, $5);
@@ -1747,7 +1757,7 @@ tf_port_declaration /* IEEE1800-2005: A.2.7 */
 
   | port_direction K_integer list_of_identifiers ';'
       { list<pform_range_t>*range_stub = make_range_from_width(integer_width);
-	vector<PWire*>*tmp = pform_make_task_ports(@1, $1, IVL_VT_LOGIC, true,
+	vector<pform_tf_port_t>*tmp = pform_make_task_ports(@1, $1, IVL_VT_LOGIC, true,
 						    range_stub, $3, true);
 	$$ = tmp;
       }
@@ -1756,7 +1766,7 @@ tf_port_declaration /* IEEE1800-2005: A.2.7 */
 
   | port_direction K_time list_of_identifiers ';'
       { list<pform_range_t>*range_stub = make_range_from_width(64);
-	vector<PWire*>*tmp = pform_make_task_ports(@1, $1, IVL_VT_LOGIC, false,
+	vector<pform_tf_port_t>*tmp = pform_make_task_ports(@1, $1, IVL_VT_LOGIC, false,
 						   range_stub, $3);
 	$$ = tmp;
       }
@@ -1764,7 +1774,7 @@ tf_port_declaration /* IEEE1800-2005: A.2.7 */
   /* Ports can be real or realtime. */
 
   | port_direction real_or_realtime list_of_identifiers ';'
-      { vector<PWire*>*tmp = pform_make_task_ports(@1, $1, IVL_VT_REAL, true,
+      { vector<pform_tf_port_t>*tmp = pform_make_task_ports(@1, $1, IVL_VT_REAL, true,
 						   0, $3);
 	$$ = tmp;
       }
@@ -1783,7 +1793,7 @@ tf_port_declaration /* IEEE1800-2005: A.2.7 */
 tf_port_item /* IEEE1800-2005: A.2.7 */
 
   : port_direction_opt data_type_or_implicit IDENTIFIER range_opt tf_port_item_expr_opt
-      { vector<PWire*>*tmp;
+      { vector<pform_tf_port_t>*tmp;
 	NetNet::PortType use_port_type = $1==NetNet::PIMPLICIT? NetNet::PINPUT : $1;
 	list<perm_string>* ilist = list_from_identifier($3);
 
@@ -1825,8 +1835,8 @@ tf_port_item /* IEEE1800-2005: A.2.7 */
 	      delete $4;
 	}
 	if ($5) {
-	      yyerror(@5, "sorry: Port default expressions not supported yet.");
-	      delete $5;
+	      assert(tmp->size()==1);
+	      tmp->front().defe = $5;
 	}
      }
 
@@ -1849,7 +1859,7 @@ tf_port_item_expr_opt
 tf_port_list /* IEEE1800-2005: A.2.7 */
 
   : tf_port_list ',' tf_port_item
-      { vector<PWire*>*tmp;
+      { vector<pform_tf_port_t>*tmp;
 	if ($1 && $3) {
 	      size_t s1 = $1->size();
 	      tmp = $1;
@@ -3033,8 +3043,10 @@ expr_primary
      function call. If a system identifier, then a system function
      call. */
 
-  | hierarchy_identifier '(' expression_list_proper ')'
-      { PECallFunction*tmp = pform_make_call_function(@1, *$1, *$3);
+  | hierarchy_identifier '(' expression_list_with_nuls ')'
+      { list<PExpr*>*expr_list = $3;
+	strip_tail_items(expr_list);
+	PECallFunction*tmp = pform_make_call_function(@1, *$1, *expr_list);
 	delete $1;
 	$$ = tmp;
       }
@@ -3044,15 +3056,6 @@ expr_primary
 	FILE_NAME(tmp, @1);
 	delete[]$1;
 	$$ = tmp;
-      }
-  | hierarchy_identifier '(' ')'
-      { const list<PExpr*> empty;
-	PECallFunction*tmp = pform_make_call_function(@1, *$1, empty);
-	delete $1;
-	$$ = tmp;
-	if (!gn_system_verilog()) {
-	      yyerror(@1, "error: Empty function argument list requires SystemVerilog.");
-	}
       }
   | PACKAGE_IDENTIFIER K_SCOPE_RES IDENTIFIER '(' expression_list_proper ')'
       { perm_string use_name = lex_strings.make($3);
@@ -3353,7 +3356,7 @@ function_item_list
   | function_item_list function_item
       { /* */
 	if ($1 && $2) {
-	      vector<PWire*>*tmp = $1;
+	      vector<pform_tf_port_t>*tmp = $1;
 	      size_t s1 = tmp->size();
 	      tmp->resize(s1 + $2->size());
 	      for (size_t idx = 0 ; idx < $2->size() ; idx += 1)
@@ -5813,9 +5816,14 @@ statement_item /* This is roughly statement_item in the LRM */
       }
 
   | implicit_class_handle '.' hierarchy_identifier '(' expression_list_with_nuls ')' ';'
-      { PCallTask*tmp = new PCallTask(*$3, *$5);
-	yyerror(@1, "sorry: Implicit class handle not supported in front of task names.");
+      { pform_name_t*nam = $1;
+	while (! $3->empty()) {
+	      nam->push_back($3->front());
+	      $3->pop_front();
+	}
+	PCallTask*tmp = new PCallTask(*nam, *$5);
 	FILE_NAME(tmp, @1);
+	delete $1;
 	delete $3;
 	delete $5;
 	$$ = tmp;
@@ -5828,6 +5836,18 @@ statement_item /* This is roughly statement_item in the LRM */
 	$$ = tmp;
       }
 
+    /* IEEE1800 A.1.8: class_constructor_declaration with a call to
+       parent constructor. Note that the implicit_class_handle must
+       be K_super ("this.new" makes little sense) but that would
+       cause a conflict. Anyhow, this statement must be in the
+       beginning of a constructor, but let the elaborator figure that
+       out. */
+
+  | implicit_class_handle '.' K_new '(' expression_list_with_nuls ')' ';'
+      { yyerror(@1, "sorry: Calls to superclass constructor not supported.");
+	yyerrok;
+        $$ = new PNoop;
+      }
   | hierarchy_identifier '(' error ')' ';'
       { yyerror(@3, "error: Syntax error in task arguments.");
 	list<PExpr*>pt;
@@ -5931,13 +5951,13 @@ analog_statement
   /* Task items are, other than the statement, task port items and
      other block items. */
 task_item
-  : block_item_decl  { $$ = new vector<PWire*>(0); }
+  : block_item_decl  { $$ = new vector<pform_tf_port_t>(0); }
   | tf_port_declaration   { $$ = $1; }
   ;
 
 task_item_list
   : task_item_list task_item
-      { vector<PWire*>*tmp = $1;
+      { vector<pform_tf_port_t>*tmp = $1;
 	size_t s1 = tmp->size();
 	tmp->resize(s1 + $2->size());
 	for (size_t idx = 0 ; idx < $2->size() ; idx += 1)

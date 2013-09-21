@@ -183,6 +183,15 @@ ostream& operator <<(ostream&o, struct __ScopePathManip marg)
       return o;
 }
 
+ostream& operator <<(ostream&o, struct __ObjectPathManip marg)
+{
+      if (marg.obj != 0) {
+	    dump_scope_path(o, marg.obj->scope());
+	    o << "." << marg.obj->name();
+      }
+      return o;
+}
+
 void NetBranch::dump(ostream&o, unsigned ind) const
 {
       static const char*pin_names[2] = {
@@ -746,12 +755,13 @@ void NetUserFunc::dump_node(ostream&o, unsigned ind) const
 
 void NetTaskDef::dump(ostream&o, unsigned ind) const
 {
-      o << setw(ind) << "" << "task " << scope_path(scope_) << ";" << endl;
+      o << setw(ind) << "" << "task " << scope_path(scope()) << ";" << endl;
 
-      for (unsigned idx = 0 ;  idx < ports_.size() ;  idx += 1) {
+      for (unsigned idx = 0 ;  idx < port_count() ;  idx += 1) {
+	    const NetNet*pnet = port(idx);
 	    o << setw(ind+4) << "";
-	    assert(ports_[idx]);
-	    switch (ports_[idx]->port_type()) {
+	    assert(pnet);
+	    switch (pnet->port_type()) {
 		case NetNet::PINPUT:
 		  o << "input ";
 		  break;
@@ -765,7 +775,7 @@ void NetTaskDef::dump(ostream&o, unsigned ind) const
 		  o << "NOT_A_PORT ";
 		  break;
 	    }
-	    o << ports_[idx]->name() << ";" << endl;
+	    o << pnet->name() << ";" << endl;
       }
 
       if (proc_)
@@ -1120,7 +1130,7 @@ void NetFree::dump(ostream&o, unsigned ind) const
 
 void NetFuncDef::dump(ostream&o, unsigned ind) const
 {
-      o << setw(ind) << "" << "function definition for " << scope_path(scope_) << endl;
+      o << setw(ind) << "" << "function definition for " << scope_path(scope()) << endl;
       if (result_sig_) {
 	    o << setw(ind+2) << "" << "Return signal: ";
 	    if (result_sig_->get_signed()) o << "+";
@@ -1148,8 +1158,8 @@ void NetFuncDef::dump(ostream&o, unsigned ind) const
 	    if (port(idx)->get_signed()) o << "+";
 	    o << port(idx)->name() << endl;
       }
-      if (statement_)
-	    statement_->dump(o, ind+2);
+      if (proc_)
+	    proc_->dump(o, ind+2);
       else
 	    o << setw(ind+2) << "" << "MISSING PROCEDURAL CODE" << endl;
 }

@@ -39,6 +39,7 @@
 class Design;
 class NetScope;
 class PExpr;
+class PWire;
 class Statement;
 class ivl_type_s;
 typedef named<verinum> named_number_t;
@@ -70,6 +71,14 @@ struct decl_assignment_t {
       std::auto_ptr<PExpr> expr;
 };
 
+struct pform_tf_port_t {
+      PWire*port;
+      PExpr*defe;
+
+      inline pform_tf_port_t() : port(0), defe(0) { }
+      inline explicit pform_tf_port_t(PWire*p) : port(p), defe(0) { }
+};
+
 /*
  * This is the base class for data types that are matched by the
  * "data_type" rule in the parse rule. We make the type virtual so
@@ -85,6 +94,10 @@ class data_type_t : public LineInfo {
       virtual void pform_dump(std::ostream&out, unsigned indent) const;
 	// Elaborate the type to an ivl_type_s type.
       virtual ivl_type_s* elaborate_type(Design*des, NetScope*scope) const;
+};
+
+struct void_type_t : public data_type_t {
+      virtual void pform_dump(std::ostream&out, unsigned indent) const;
 };
 
 /*

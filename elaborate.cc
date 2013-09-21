@@ -3208,20 +3208,6 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 {
       assert(scope);
 
-      if (scope->in_func()) {
-	    cerr << get_fileline() << ": error: functions cannot enable/call "
-	            "tasks." << endl;
-	    des->errors += 1;
-	    return 0;
-      }
-
-      if (scope->in_final()) {
-	    cerr << get_fileline() << ": error: final procedures cannot "
-	            "enable/call tasks." << endl;
-	    des->errors += 1;
-	    return 0;
-      }
-
       NetScope*pscope = scope;
       if (package_) {
 	    pscope = des->find_package(package_->pscope_name());
@@ -3260,29 +3246,7 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
       assert(def);
 
 
-      unsigned parm_count = parms_.size();
-
-      if (debug_elaborate) {
-	    cerr << get_fileline() << "PCallTask::elaborate_usr: "
-		 << "Elaborate call to task " << task->basename()
-		 << " width " << parm_count << " arguments." << endl;
-      }
-
-	// Handle special case that the definition has no arguments
-	// but the parser found a single nul argument. This is an
-	// argument of the parser allowing for the possibility of
-	// default values for argumets: The parser cannot tell the
-	// difference between "func()" and "func(<default>)".
-      if (def->port_count() == 0 && parm_count == 1 && parms_[0] == 0)
-	    parm_count = 0;
-
-      if (parm_count != def->port_count()) {
-	    cerr << get_fileline() << ": error: Port count mismatch in call to ``"
-		 << path_ << "''. Got " << parm_count
-		 << " ports, expecting " << def->port_count() << " ports." << endl;
-	    des->errors += 1;
-	    return 0;
-      }
+      unsigned parm_count = def->port_count();
 
 	/* Handle non-automatic tasks with no parameters specially. There is
            no need to make a sequential block to hold the generated code. */
@@ -3309,6 +3273,10 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope) const
 	// There is no signal to search for so this cannot be a method.
       if (use_path.empty()) return 0;
 
+	// Search for an object using the use_path. This should
+	// resolve to a class object. Note that the "this" symbol
+	// (internally represented as "@") is handled by there being a
+	// "this" object in the instance scope.
       symbol_search(this, des, scope, use_path,
 		    net, par, eve, ex1, ex2);
 
@@ -3353,6 +3321,31 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope) const
       return 0;
 }
 
+/*
+ * If during elaboration we determine (for sure) that we are calling a
+ * task (and not just a void function) then this method tests if that
+ * task call is allowed in the current context. If so, return true. If
+ * not, print and error message and return false;
+ */
+bool PCallTask::test_task_calls_ok_(Design*des, NetScope*scope) const
+{
+      if (scope->in_func()) {
+	    cerr << get_fileline() << ": error: Functions cannot enable/call "
+	            "tasks." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      if (scope->in_final()) {
+	    cerr << get_fileline() << ": error: final procedures cannot "
+	            "enable/call tasks." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      return true;
+}
+
 NetProc* PCallTask::elaborate_function_(Design*des, NetScope*scope) const
 {
       NetFuncDef*func = des->find_function(scope, path_);
@@ -3377,13 +3370,39 @@ NetProc* PCallTask::elaborate_function_(Design*des, NetScope*scope) const
 NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 					  NetScope*task, NetExpr*use_this) const
 {
-      NetTaskDef*def = task->task_def();
+      NetBaseDef*def = 0;
+      if (task->type() == NetScope::TASK) {
+	    def = task->task_def();
+
+	      // OK, this is certainly a TASK that I'm calling. Make
+	      // sure that is OK where I am. Even if this test fails,
+	      // continue with the elaboration as if it were OK so
+	      // that we can catch more errors.
+	    test_task_calls_ok_(des, scope);
+
+      } else if (task->type() == NetScope::FUNC) {
+	    NetFuncDef*tmp = task->func_def();
+	    if (tmp->return_sig() != 0) {
+		  cerr << get_fileline() << ": error: "
+		       << "Calling a non-void function as a task." << endl;
+		  des->errors += 1;
+	    }
+	    def = tmp;
+      }
 
 	/* The caller has checked the parms_ size to make sure it
 	   matches the task definition, so we can just use the task
 	   definition to get the parm_count. */
 
       unsigned parm_count = def->port_count();
+
+      if (parms_.size() > parm_count) {
+	    cerr << get_fileline() << ": error: "
+		 << "Too many arguments (" << parms_.size()
+		 << ", expecting " << parm_count << ")"
+		 << " in call to task." << endl;
+	    des->errors += 1;
+      }
 
       NetBlock*block = new NetBlock(NetBlock::SEQU, 0);
       block->set_line(*this);
@@ -3432,22 +3451,6 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 
 	    size_t parms_idx = use_this? idx-1 : idx;
 
-	    if (parms_[parms_idx] == 0 && !gn_system_verilog()) {
-		  cerr << get_fileline() << ": error: "
-		       << "Missing argument " << (idx+1)
-		       << " of call to task." << endl;
-		  des->errors += 1;
-		  continue;
-	    }
-
-	    if (parms_[parms_idx] == 0) {
-		  cerr << get_fileline() << ": sorry: "
-		       << "Implicit arguments (arg " << (idx+1)
-		       << ") not supported." << endl;
-		  des->errors += 1;
-		  continue;
-	    }
-
 	    NetNet*port = def->port(idx);
 	    assert(port->port_type() != NetNet::NOT_A_PORT);
 	    if (port->port_type() == NetNet::POUTPUT)
@@ -3457,11 +3460,33 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    unsigned wid = count_lval_width(lv);
 	    ivl_variable_type_t lv_type = lv->expr_type();
 
-	    NetExpr*rv = elaborate_rval_expr(des, scope, lv_type, wid, parms_ [parms_idx]);
-	    if (NetEEvent*evt = dynamic_cast<NetEEvent*> (rv)) {
-		  cerr << evt->get_fileline() << ": error: An event '"
-		       << evt->event()->name() << "' can not be a user "
-		          "task argument." << endl;
+	    NetExpr*rv = 0;
+
+	    if (parms_idx<parms_.size() && parms_[parms_idx]) {
+		  rv = elaborate_rval_expr(des, scope, lv_type, wid, parms_ [parms_idx]);
+		  if (NetEEvent*evt = dynamic_cast<NetEEvent*> (rv)) {
+			cerr << evt->get_fileline() << ": error: An event '"
+			     << evt->event()->name() << "' can not be a user "
+			      "task argument." << endl;
+			des->errors += 1;
+			continue;
+		  }
+
+	    } else if (def->port_defe(idx)) {
+		  if (! gn_system_verilog()) {
+			cerr << get_fileline() << ": internal error: "
+			     << "Found (and using) default task expression "
+			     << " requires SystemVerilog." << endl;
+			des->errors += 1;
+		  }
+		  rv = def->port_defe(idx);
+		  if (lv_type==IVL_VT_BOOL||lv_type==IVL_VT_LOGIC)
+			rv = pad_to_width(rv->dup_expr(), wid, *this);
+
+	    } else {
+		  cerr << get_fileline() << ": error: "
+		       << "Missing argument " << (idx+1)
+		       << " of call to task." << endl;
 		  des->errors += 1;
 		  continue;
 	    }

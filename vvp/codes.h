@@ -113,6 +113,7 @@ extern bool of_IX_GETV(vthread_t thr, vvp_code_t code);
 extern bool of_IX_GETV_S(vthread_t thr, vvp_code_t code);
 extern bool of_IX_GET_S(vthread_t thr, vvp_code_t code);
 extern bool of_IX_LOAD(vthread_t thr, vvp_code_t code);
+extern bool of_IX_MOV(vthread_t thr, vvp_code_t code);
 extern bool of_IX_MUL(vthread_t thr, vvp_code_t code);
 extern bool of_IX_SUB(vthread_t thr, vvp_code_t code);
 extern bool of_JMP(vthread_t thr, vvp_code_t code);

@@ -307,54 +307,105 @@ static void blend_class_constructors(PClass*pclass)
       perm_string new1 = perm_string::literal("new");
       perm_string new2 = perm_string::literal("new@");
 
+      PFunction*use_new;
+      PFunction*use_new2;
+
+	// Locate the explicit constructor.
       map<perm_string,PFunction*>::iterator iter_new = pclass->funcs.find(new1);
       if (iter_new == pclass->funcs.end())
-	    return;
+	    use_new = 0;
+      else
+	    use_new = iter_new->second;
 
+	// Locate the implicit constructor.
       map<perm_string,PFunction*>::iterator iter_new2 = pclass->funcs.find(new2);
       if (iter_new2 == pclass->funcs.end())
+	    use_new2 = 0;
+      else
+	    use_new2 = iter_new2->second;
+
+	// If there are no constructors, then we are done.
+      if (use_new==0 && use_new2==0)
 	    return;
 
-      PFunction*use_new  = iter_new->second;
-      PFunction*use_new2 = iter_new2->second;
+	// While we're here, look for a super.new() call. If we find
+	// it, strip it out of the constructor and set it aside for
+	// when we actually call the chained constructor.
+      PChainConstructor*chain_new = use_new? use_new->extract_chain_constructor() : 0;
 
-	// These constructors must be methods of the same class.
-      ivl_assert(*use_new, use_new->method_of() == use_new2->method_of());
+	// If we do not have an explicit constructor chain, but there
+	// is a parent class, then create an implicit chain.
+      if (chain_new==0 && pclass->type->base_type!=0) {
+	    chain_new = new PChainConstructor(pclass->type->base_args);
+	    chain_new->set_line(*pclass);
+      }
 
-      Statement*def_new = use_new->get_statement();
-      Statement*def_new2 = use_new2->get_statement();
+	// If there are both an implicit and explicit constructor,
+	// then blend the implicit constructor into the explicit
+	// constructor. This eases the task for the elaborator later.
+      if (use_new && use_new2) {
+	      // These constructors must be methods of the same class.
+	    ivl_assert(*use_new, use_new->method_of() == use_new2->method_of());
 
-	// If either constructor has no definition, then give up. This
-	// might happen, for example, during parse errors or other
-	// degenerate situations.
-      if (def_new==0 || def_new2==0)
-	    return;
+	    Statement*def_new = use_new->get_statement();
+	    Statement*def_new2 = use_new2->get_statement();
 
-      PBlock*blk_new = dynamic_cast<PBlock*> (def_new);
+	      // It is possible, i.e. recovering from a parse error,
+	      // for the statement from the constructor to be
+	      // missing. In that case, create an empty one.
+	    if (def_new==0) {
+		  def_new = new PBlock(PBlock::BL_SEQ);
+		  use_new->set_statement(def_new);
+	    }
 
-	// For now, only do this if the functions are defined by
-	// statement blocks. That should be true by definition for
-	// implicit constructors, and common for explicit constructors.
-      if (blk_new==0)
-	    return;
+	    if (def_new2) use_new->push_statement_front(def_new2);
 
-      ivl_assert(*blk_new,  blk_new ->bl_type()==PBlock::BL_SEQ);
+	      // Now the implicit initializations are all built into
+	      // the constructor. Delete the "new@" constructor.
+	    pclass->funcs.erase(iter_new2);
+	    delete use_new2;
+	    use_new2 = 0;
+      }
 
-      blk_new->push_statement_front(def_new2);
-
-      pclass->funcs.erase(iter_new2);
-      delete use_new2;
+      if (chain_new) {
+	    if (use_new2) {
+		  use_new2->push_statement_front(chain_new);
+	    } else {
+		  use_new->push_statement_front(chain_new);
+	    }
+	    chain_new = 0;
+      }
 }
 
 static void elaborate_scope_class(Design*des, NetScope*scope, PClass*pclass)
 {
       class_type_t*use_type = pclass->type;
-      netclass_t*use_class = new netclass_t(use_type->name);
 
       if (debug_scopes) {
 	    cerr << pclass->get_fileline() <<": elaborate_scope_class: "
 		 << "Elaborate scope class " << pclass->pscope_name() << endl;
       }
+
+      class_type_t*base_class = dynamic_cast<class_type_t*> (use_type->base_type);
+      if (use_type->base_type && !base_class) {
+	    cerr << pclass->get_fileline() << ": error: "
+		 << "Base type of " << use_type->name
+		 << " is not a class." << endl;
+	    des->errors += 1;
+      }
+
+      netclass_t*use_base_class = 0;
+      if (base_class) {
+	    use_base_class = scope->find_class(base_class->name);
+	    if (use_base_class == 0) {
+		  cerr << pclass->get_fileline() << ": error: "
+		       << "Base class " << base_class->name
+		       << " not found." << endl;
+		  des->errors += 1;
+	    }
+      }
+
+      netclass_t*use_class = new netclass_t(use_type->name, use_base_class);
 
 	// Class scopes have no parent scope, because references are
 	// not allowed to escape a class method.

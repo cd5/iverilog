@@ -510,6 +510,8 @@ class PEIdent : public PExpr {
       NetNet* elaborate_lnet_common_(Design*des, NetScope*scope,
 				     bool bidirectional_flag) const;
 
+      NetAssign_*scan_lname_for_nested_members_(Design*des, NetScope*scope,
+						       const pform_name_t&path) const;
       bool eval_part_select_(Design*des, NetScope*scope, NetNet*sig,
 			     long&midx, long&lidx) const;
 };
@@ -554,6 +556,11 @@ class PENewClass : public PExpr {
 	// the type argument is going to be a netclas_t object.
       virtual NetExpr*elaborate_expr(Design*des, NetScope*scope,
 				     ivl_type_t type, unsigned flags) const;
+
+    private:
+      NetExpr* elaborate_expr_constructor_(Design*des, NetScope*scope,
+					   const netclass_t*ctype,
+					   NetExpr*obj, unsigned flags) const;
 
     private:
       std::vector<PExpr*>parms_;

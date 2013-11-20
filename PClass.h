@@ -24,6 +24,8 @@
 # include  "StringHeap.h"
 # include  <iostream>
 
+class PChainConstructor;
+
 /*
  * SystemVerilog supports class declarations with their own lexical
  * scope, etc. The parser arranges for these to be created and

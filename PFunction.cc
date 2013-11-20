@@ -19,7 +19,9 @@
 
 # include "config.h"
 # include "PTask.h"
+# include "Statement.h"
 # include <cassert>
+# include "ivl_assert.h"
 
 PFunction::PFunction(perm_string name, LexicalScope*parent, bool is_auto__)
 : PTaskFunc(name, parent), statement_(0)
@@ -39,7 +41,45 @@ void PFunction::set_statement(Statement*s)
       statement_ = s;
 }
 
+void PFunction::push_statement_front(Statement*stmt)
+{
+	// This can only happen after the statement is initially set.
+      ivl_assert(*this, statement_);
+
+	// Get the PBlock of the statement. If it is not a PBlock,
+	// then create one to wrap the existing statement and the new
+	// statement that we're pushing.
+      PBlock*blk = dynamic_cast<PBlock*> (statement_);
+      if (blk == 0) {
+	    PBlock*tmp = new PBlock(PBlock::BL_SEQ);
+	    tmp->set_line(*this);
+	    vector<Statement*>tmp_list(1);
+	    tmp_list[0] = statement_;
+	    tmp->set_statement(tmp_list);
+
+	    statement_ = tmp;
+	    blk = tmp;
+      }
+
+	// Now do the push.
+      blk->push_statement_front(stmt);
+}
+
 void PFunction::set_return(const data_type_t*t)
 {
       return_type_ = t;
+}
+
+PChainConstructor* PFunction::extract_chain_constructor()
+{
+      PChainConstructor*res = 0;
+
+      if (res = dynamic_cast<PChainConstructor*> (statement_)) {
+	    statement_ = 0;
+
+      } else if (PBlock*blk = dynamic_cast<PBlock*>(statement_)) {
+	    res = blk->extract_chain_constructor();
+      }
+
+      return res;
 }

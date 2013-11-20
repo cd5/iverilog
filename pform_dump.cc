@@ -180,14 +180,30 @@ void struct_type_t::pform_dump(ostream&out, unsigned indent) const
 
 void class_type_t::pform_dump(ostream&out, unsigned indent) const
 {
-      out << setw(indent) << "" << "class " << name << " {";
+      out << setw(indent) << "" << "class " << name;
 
+      if (base_type) out << " extends <type>";
+      if (base_args.size() > 0) {
+	    out << " (";
+	    for (list<PExpr*>::const_iterator cur = base_args.begin()
+		       ; cur != base_args.end() ; ++cur) {
+		  const PExpr*curp = *cur;
+		  if (cur != base_args.begin())
+			out << ", ";
+		  curp->dump(out);
+	    }
+	    out << ")";
+      }
+
+      out << " {";
       for (map<perm_string,prop_info_t>::const_iterator cur = properties.begin()
 		 ; cur != properties.end() ; ++cur) {
 	    out << " " << cur->first;
       }
 
       out << " }" << endl;
+
+      if (base_type) base_type->pform_dump(out, indent+4);
 }
 
 void class_type_t::pform_dump_init(ostream&out, unsigned indent) const
@@ -815,6 +831,19 @@ void PCase::dump(ostream&out, unsigned ind) const
       }
 
       out << setw(ind) << "" << "endcase" << endl;
+}
+
+void PChainConstructor::dump(ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "super.new(";
+      if (parms_.size() > 0) {
+	    if (parms_[0]) out << *parms_[0];
+      }
+      for (size_t idx = 1 ; idx < parms_.size() ; idx += 1) {
+	    out << ", ";
+	    if (parms_[idx]) out << *parms_[idx];
+      }
+      out << ");" << endl;
 }
 
 void PCondit::dump(ostream&out, unsigned ind) const

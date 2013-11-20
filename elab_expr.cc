@@ -4675,17 +4675,18 @@ unsigned PENewClass::test_width(Design*, NetScope*, width_mode_t&)
       return 1;
 }
 
-NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
-				    ivl_type_t ntype, unsigned) const
+/*
+ * This elaborates the constructor for a class. This arranges for the
+ * call of class constructor, if present, and also
+ * initializers in front of an explicit constructor.
+ *
+ * The derived argument is the type of the class derived from the
+ * current one. This is used to get chained constructor arguments, if necessary.
+ */
+NetExpr* PENewClass::elaborate_expr_constructor_(Design*des, NetScope*scope,
+						 const netclass_t*ctype,
+						 NetExpr*obj, unsigned flags) const
 {
-      NetExpr*obj = new NetENew(ntype);
-      obj->set_line(*this);
-
-	// Find the constructor for the class. If there is no
-	// constructor then the result of this expression is the
-	// allocation alone.
-      const netclass_t*ctype = dynamic_cast<const netclass_t*> (ntype);
-
 	// If there is an initializer function, then pass the object
 	// through that function first. Note tha the initializer
 	// function has no arguments other then the object itself.
@@ -4707,6 +4708,7 @@ NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
 	    obj = tmp;
       }
 
+
       NetScope*new_scope = ctype->method_from_name(perm_string::literal("new"));
       if (new_scope == 0) {
 	      // No constructor.
@@ -4719,6 +4721,7 @@ NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
 	    }
 	    return obj;
       }
+
 
       NetFuncDef*def = new_scope->func_def();
       ivl_assert(*this, def);
@@ -4743,7 +4746,8 @@ NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
 	      // While there are default arguments, check them.
 	    if (idx <= parms_.size() && parms_[idx-1]) {
 		  PExpr*tmp = parms_[idx-1];
-		  parms[idx] = elaborate_rval_expr(des, scope, def->port(idx)->net_type(),
+		  parms[idx] = elaborate_rval_expr(des, scope,
+						   def->port(idx)->net_type(),
 						   def->port(idx)->data_type(),
 						   def->port(idx)->vector_width(),
 						   tmp, false);
@@ -4784,6 +4788,21 @@ NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
       con->set_line(*this);
 
       return con;
+}
+
+NetExpr* PENewClass::elaborate_expr(Design*des, NetScope*scope,
+				    ivl_type_t ntype, unsigned flags) const
+{
+      NetExpr*obj = new NetENew(ntype);
+      obj->set_line(*this);
+
+	// Find the constructor for the class. If there is no
+	// constructor then the result of this expression is the
+	// allocation alone.
+      const netclass_t*ctype = dynamic_cast<const netclass_t*> (ntype);
+
+      obj = elaborate_expr_constructor_(des, scope, ctype, obj, flags);
+      return obj;
 }
 
 unsigned PENewCopy::test_width(Design*, NetScope*, width_mode_t&)

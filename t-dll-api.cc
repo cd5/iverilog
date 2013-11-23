@@ -1572,12 +1572,12 @@ extern "C" ivl_event_t ivl_lpm_trigger(ivl_lpm_t net)
       }
 }
 
+/*
+ * Deprecated
+ */
 extern "C" ivl_expr_t ivl_lval_mux(ivl_lval_t net)
 {
-      assert(net);
-      if (net->type_ == IVL_LVAL_MUX)
-	    return net->idx;
-      return 0x0;
+      return 0;
 }
 
 extern "C" ivl_expr_t ivl_lval_idx(ivl_lval_t net)
@@ -1618,13 +1618,20 @@ extern "C" ivl_signal_t ivl_lval_sig(ivl_lval_t net)
       assert(net);
       switch (net->type_) {
 	  case IVL_LVAL_REG:
-	  case IVL_LVAL_NET:
-	  case IVL_LVAL_MUX:
 	  case IVL_LVAL_ARR:
 	    return net->n.sig;
 	  default:
 	    return 0;
       }
+}
+
+extern "C" ivl_lval_t ivl_lval_nest(ivl_lval_t net)
+{
+      assert(net);
+      if (net->type_ == IVL_LVAL_LVAL)
+	    return net->n.nest;
+
+      return 0;
 }
 
 extern "C" const char* ivl_nature_name(ivl_nature_t net)
@@ -2728,11 +2735,9 @@ extern "C" unsigned ivl_stmt_lwidth(ivl_statement_t net)
       for (unsigned idx = 0 ;  idx < nlvals ;  idx += 1) {
 	    ivl_lval_t cur = lvals + idx;
 	    switch(cur->type_) {
-		case IVL_LVAL_MUX:
-		  sum += 1;
-		  break;
 		case IVL_LVAL_REG:
 		case IVL_LVAL_ARR:
+		case IVL_LVAL_LVAL:
 		  sum += ivl_lval_width(cur);
 		  break;
 		default:

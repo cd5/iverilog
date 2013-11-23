@@ -173,6 +173,7 @@ struct dll_target  : public target_t, public expr_scan_t {
       void add_root(const NetScope *s);
 
       bool make_assign_lvals_(const NetAssignBase*net);
+      bool make_single_lval_(const LineInfo*li, struct ivl_lval_s*cur, const NetAssign_*asn);
       void sub_off_from_expr_(long);
       void mul_expr_by_const_(long);
 
@@ -453,10 +454,8 @@ struct ivl_lpm_s {
 
 enum ivl_lval_type_t {
       IVL_LVAL_REG = 0,
-      IVL_LVAL_MUX = 1,
-      /* IVL_LVAL_MEM = 2, / Deprecated in favor of LVAL_ARR? */
-      IVL_LVAL_NET = 3, /* Only force can have NET l-values */
-      IVL_LVAL_ARR = 4
+      IVL_LVAL_ARR = 4,
+      IVL_LVAL_LVAL= 5  // Nested l-value
 };
 
 struct ivl_lval_s {
@@ -464,11 +463,11 @@ struct ivl_lval_s {
       ivl_select_type_t sel_type :3;
       ivl_expr_t idx;
       unsigned width_;
-      unsigned type_   : 8;
+      unsigned type_   : 8; /* values from ivl_lval_type_t */
       int property_idx;
       union {
 	    ivl_signal_t sig;
-	    ivl_memory_t mem;
+	    ivl_lval_t  nest; // type_ == IVL_LVAL_LVAL
       } n;
 };
 

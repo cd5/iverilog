@@ -1444,12 +1444,11 @@ extern const char*ivl_lpm_string(ivl_lpm_t net);
  *    for the local part selecting I might to in the lval object, as
  *    well as the target object width.
  *
- * ivl_lval_mux
- *    If the l-value includes a bit select expression, this method
- *    returns an ivl_expr_t that represents that
- *    expression.  Otherwise, it returns 0.
+ * ivl_lval_mux (* obsolete *)
  *
- *    (Should this be combined with ivl_lval_idx? -Ed)
+ * ivl_lval_nest
+ *    If the l-value is an object more complex than a variable, then
+ *    this returns the nested l-value (and ivl_lval_sig==0).
  *
  * ivl_lval_sig
  *    If the l-value is a variable, this method returns the signal
@@ -1492,12 +1491,13 @@ extern const char*ivl_lpm_string(ivl_lpm_t net);
  */
 
 extern unsigned    ivl_lval_width(ivl_lval_t net);
-extern ivl_expr_t  ivl_lval_mux(ivl_lval_t net); /* XXXX Obsolete? */
+extern ivl_expr_t  ivl_lval_mux(ivl_lval_t net) __attribute__((deprecated)); /* XXXX Obsolete? */
 extern ivl_expr_t  ivl_lval_idx(ivl_lval_t net);
 extern ivl_expr_t  ivl_lval_part_off(ivl_lval_t net);
 extern ivl_select_type_t ivl_lval_sel_type(ivl_lval_t net);
 extern int ivl_lval_property_idx(ivl_lval_t net);
 extern ivl_signal_t ivl_lval_sig(ivl_lval_t net);
+extern ivl_lval_t  ivl_lval_nest(ivl_lval_t net);
 
 
 /* NEXUS

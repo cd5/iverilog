@@ -38,7 +38,6 @@
 # include  "netmisc.h"
 # include  "netclass.h"
 # include  "netenum.h"
-# include  "netstruct.h"
 # include  "netvector.h"
 # include  "netdarray.h"
 # include  "netparray.h"
@@ -873,47 +872,11 @@ static netclass_t* locate_class_type(Design*, NetScope*scope,
       return use_class;
 }
 
-static netstruct_t* elaborate_struct_type(Design*des, NetScope*scope,
-					  struct_type_t*struct_type)
-{
-      netstruct_t*res = new netstruct_t;
-
-      res->packed(struct_type->packed_flag);
-
-      for (list<struct_member_t*>::iterator cur = struct_type->members->begin()
-		 ; cur != struct_type->members->end() ; ++ cur) {
-
-	    vector<netrange_t>packed_dimensions;
-
-	    struct_member_t*curp = *cur;
-	    if (curp->range.get() && ! curp->range->empty()) {
-		  bool bad_range;
-		  bad_range = evaluate_ranges(des, scope, packed_dimensions, *curp->range);
-		  ivl_assert(*curp, !bad_range);
-	    } else {
-		  packed_dimensions.push_back(netrange_t(0,0));
-	    }
-
-	    for (list<decl_assignment_t*>::iterator name = curp->names->begin()
-		       ; name != curp->names->end() ;  ++ name) {
-		  decl_assignment_t*namep = *name;
-
-		  netstruct_t::member_t memb;
-		  memb.name = namep->name;
-		  memb.type = curp->type;
-		  memb.packed_dims = packed_dimensions;
-		  res->append_member(memb);
-	    }
-      }
-
-      return res;
-}
-
 static ivl_type_s*elaborate_type(Design*des, NetScope*scope,
 				 data_type_t*pform_type)
 {
       if (struct_type_t*struct_type = dynamic_cast<struct_type_t*>(pform_type)) {
-	    netstruct_t*use_type = elaborate_struct_type(des, scope, struct_type);
+	    netstruct_t*use_type = struct_type->elaborate_type(des, scope);
 	    return use_type;
       }
 
@@ -1244,7 +1207,7 @@ NetNet* PWire::elaborate_sig(Design*des, NetScope*scope) const
       } else if (struct_type_t*struct_type = dynamic_cast<struct_type_t*>(set_data_type_)) {
 	      // If this is a struct type, then build the net with the
 	      // struct type.
-	    netstruct_t*use_type = elaborate_struct_type(des, scope, struct_type);
+	    netstruct_t*use_type = struct_type->elaborate_type(des, scope);
 	    if (debug_elaborate) {
 		  cerr << get_fileline() << ": debug: Create signal " << wtype;
 		  if (use_type->packed())

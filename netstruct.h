@@ -24,15 +24,16 @@
 # include  "ivl_target.h"
 # include  "nettypes.h"
 
+class Design;
+
 class netstruct_t : public LineInfo, public ivl_type_s {
 
     public:
       struct member_t {
 	    perm_string name;
-	    ivl_variable_type_t type;
-	    std::vector<netrange_t> packed_dims;
-	    long width() const;
-	    ivl_variable_type_t data_type() const { return type; };
+	    ivl_type_t net_type;
+	    inline ivl_variable_type_t data_type() const
+	    { return net_type->base_type(); };
 	      // We need to keep the individual element sign information.
 	    bool get_signed() const { return false; };
       };
@@ -41,10 +42,20 @@ class netstruct_t : public LineInfo, public ivl_type_s {
       netstruct_t();
       ~netstruct_t();
 
+	// If this is a union (instead of struct) then this flag is
+	// set. We handle union and struct together because they are
+	// so similar.
+      void union_flag(bool);
+      bool union_flag(void) const;
+
       void packed(bool flag);
       bool packed(void) const;
 
-      void append_member(const member_t&);
+	// Append a new member to the struct/union. This must be done
+	// after the union_flag and packed settings are set. This
+	// function does error checking, and the "des" argument is
+	// only present so that it can set error flags.
+      void append_member(Design*des, const member_t&);
 
 	// Given the name of a member, return a pointer to the member
 	// description, and set the off value to be the offset into
@@ -61,13 +72,12 @@ class netstruct_t : public LineInfo, public ivl_type_s {
       ivl_variable_type_t base_type() const;
 
     private:
+      bool union_;
       bool packed_;
       std::vector<member_t>members_;
 };
 
+inline bool netstruct_t::union_flag(void) const { return union_; }
 inline bool netstruct_t::packed(void) const { return packed_; }
-
-inline long netstruct_t::member_t::width() const
-{ return netrange_width(packed_dims); }
 
 #endif

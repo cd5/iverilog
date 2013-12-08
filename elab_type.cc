@@ -21,7 +21,9 @@
 # include  "netlist.h"
 # include  "netclass.h"
 # include  "netdarray.h"
+# include  "netenum.h"
 # include  "netscalar.h"
+# include  "netstruct.h"
 # include  "netvector.h"
 # include  "netmisc.h"
 # include  <typeinfo>
@@ -78,6 +80,12 @@ ivl_type_s* class_type_t::elaborate_type(Design*, NetScope*scope) const
       return scope->find_class(name);
 }
 
+ivl_type_s* enum_type_t::elaborate_type(Design*des, NetScope*scope) const
+{
+      ivl_assert(*this, net_type);
+      return net_type;
+}
+
 ivl_type_s* vector_type_t::elaborate_type(Design*des, NetScope*scope) const
 {
       vector<netrange_t> packed;
@@ -128,6 +136,41 @@ ivl_type_s* real_type_t::elaborate_type(Design*, NetScope*) const
 ivl_type_s* string_type_t::elaborate_type(Design*, NetScope*) const
 {
       return &netstring_t::type_string;
+}
+
+netstruct_t* struct_type_t::elaborate_type(Design*des, NetScope*scope) const
+{
+      netstruct_t*res = new netstruct_t;
+
+      res->packed(packed_flag);
+
+      if (union_flag)
+	    res->union_flag(true);
+
+      for (list<struct_member_t*>::iterator cur = members->begin()
+		 ; cur != members->end() ; ++ cur) {
+
+	      // Elaborate the type of the member.
+	    struct_member_t*curp = *cur;
+	    ivl_type_t mem_vec = curp->type->elaborate_type(des, scope);
+	    if (mem_vec == 0)
+		  continue;
+
+	      // There may be several names that are the same type:
+	      //   <data_type> name1, name2, ...;
+	      // Process all the member, and give them a type.
+	    for (list<decl_assignment_t*>::iterator name = curp->names->begin()
+		       ; name != curp->names->end() ;  ++ name) {
+		  decl_assignment_t*namep = *name;
+
+		  netstruct_t::member_t memb;
+		  memb.name = namep->name;
+		  memb.net_type = mem_vec;
+		  res->append_member(des, memb);
+	    }
+      }
+
+      return res;
 }
 
 ivl_type_s* uarray_type_t::elaborate_type(Design*des, NetScope*scope) const

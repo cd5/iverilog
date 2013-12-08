@@ -217,7 +217,7 @@ void class_type_t::pform_dump_init(ostream&out, unsigned indent) const
 
 void struct_member_t::pform_dump(ostream&out, unsigned indent) const
 {
-      out << setw(indent) << "" << type;
+      out << setw(indent) << "" << (type.get()? typeid(*type).name() : "<nil type>");
       for (list<decl_assignment_t*>::iterator cur = names->begin()
 		 ; cur != names->end() ; ++cur) {
 	    decl_assignment_t*curp = *cur;
@@ -1328,7 +1328,7 @@ void LexicalScope::dump_localparams_(ostream&out, unsigned indent) const
 
 void LexicalScope::dump_enumerations_(ostream&out, unsigned indent) const
 {
-      for (list<enum_type_t*>::const_iterator cur = enum_sets.begin()
+      for (set<enum_type_t*>::const_iterator cur = enum_sets.begin()
 		 ; cur != enum_sets.end() ; ++ cur) {
 	    out << setw(indent) << "" << "enum {" << endl;
 

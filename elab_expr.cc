@@ -538,7 +538,7 @@ NetExpr* PEBinary::elaborate_expr_base_mult_(Design*,
 		  return tmp;
 	    }
 
-	    if (rp_val.is_zero()) {
+	    if (rp_val.is_zero() && (lp->expr_type() != IVL_VT_LOGIC)) {
 		  NetEConst*tmp = make_const_0(expr_wid);
                   tmp->cast_signed(signed_flag_);
                   tmp->set_line(*this);
@@ -756,12 +756,11 @@ unsigned PEBLeftWidth::test_width(Design*des, NetScope*scope, width_mode_t&mode)
                   r_val = rc->value().as_long();
 
               // Clip to a sensible range to avoid underflow/overflow
-              // in the following calculations. 1024 bits should be
-              // enough for anyone...
+              // in the following calculations.
             if (r_val < 0)
                   r_val = 0;
-            if (r_val > 1024)
-                  r_val = 1024;
+            if (r_val > width_cap)
+                  r_val = width_cap;
 
               // If the left operand is a simple unsized number, we
               // can calculate the actual width required for the power
